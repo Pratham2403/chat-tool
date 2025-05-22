@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    container_name: chat-tool-app
+    volumes:
+      #Mount the code for development to allow changes without rebuilding
+      - .:/app
+      #Don't mount the venv directory if you have one
+      - /app/.venv
+      - /app/__pycache__
+    ports:
+      - "8000:8000" #Adjust if your app exposes any ports
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/chat-tool
+      #add your Gemini API key here or through a .env file
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:latest
+    container_name: chat-tool-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    # No authentication for local development
+    environment:
+      - MONGO_INITDB_DATABASE=chat-tool
+
+volumes:
+  mongodb_data: # Persistent volume for MongoDB data
