@@ -51,18 +51,7 @@ class DatabaseTools:
         result = self.mongodb.create_user(user_data)
         
         if result:
-            # Also save to user.json
-            # Load existing users, remove any _id fields
-            existing = load_json_file(self.json_path) or []
-            clean_users = [ {k: v for k, v in u.items() if k != '_id'} for u in existing ]
-            # Prevent duplicate emails
-            if any(u.get('email') == user_data.get('email') for u in clean_users):
-                return f"User with email {user_data.get('email')} already exists"
-            clean_users.append(user_data)
-            save_json_file(self.json_path, clean_users)
-            
-            # Refresh RAG data
-            self.retriever.refresh_data()
+          
             
             return f"User created successfully: {json.dumps(user_data)}"
         else:
@@ -103,15 +92,7 @@ class DatabaseTools:
         result = self.mongodb.update_user(email, update_data)
         
         if result:
-            # Also update in user.json
-            # Load and sanitize existing users
-            existing = load_json_file(self.json_path) or []
-            clean_users = [ {k: v for k, v in u.items() if k != '_id'} for u in existing ]
-            for i, user in enumerate(clean_users):
-                if user.get("email") == email:
-                    clean_users[i].update(update_data)
-                    save_json_file(self.json_path, clean_users)
-                    break
+
             
             
             # Refresh RAG data
@@ -134,15 +115,6 @@ class DatabaseTools:
         result = self.mongodb.delete_user(email)
         
         if result:
-            # Also delete from user.json
-            # Load and sanitize existing users, then remove target
-            existing = load_json_file(self.json_path) or []
-            clean_users = [ {k: v for k, v in u.items() if k != '_id'} for u in existing ]
-            updated_users = [u for u in clean_users if u.get("email") != email]
-            save_json_file(self.json_path, updated_users)
-
-            # Refresh RAG data
-            self.retriever.refresh_data()
             return f"User {email} deleted successfully"
         else:
             return f"Failed to delete user {email}"
