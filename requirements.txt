@@ -1,0 +1,8 @@
+python-dotenv
+pymongo
+pydantic
+langchain
+langchain-google-genai
+langgraph
+chromadb
+sentence-transformers
