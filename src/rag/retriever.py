@@ -1,38 +1,51 @@
-#Implementing the Vecor Seach Functinoaloity, 
-# This is where the Expected Semantic Seaarch will take place
-# This is also the Root Loaction where the ElasticSearch will be implemented in the Future Iterations
-
 import os
 import json
-import chromadb
-from sentence_transformers import SentenceTransformer
+from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk
+import time
 
 class RAGRetriever:
-    """Retriever Class that for now loads the JSON Data and uses the SentenceTransformer to get the embeddings and improve the context of our LLM"""
+    """Retriever Class that uses Elasticsearch for efficient text retrieval with built-in embedding generation"""
     
-    def __init__(self, json_path):
-        """Intitialize the retriever witj the json path
+    def __init__(self, json_path, es_host="http://localhost:9200"):
+        """Initialize the retriever with json path and Elasticsearch connection
         
         Args:
             json_path (str): The path to the JSON file.
-        
+            es_host (str): Elasticsearch host URL. Defaults to http://localhost:9200.
         """
         self.json_path = json_path
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        self.chroma_client = chromadb.Client()
-        self.collection = None
+        try:
+            # Fix Elasticsearch client to specify API version compatibility
+            self.es_client = Elasticsearch(
+                es_host, 
+                request_timeout=30,
+                headers={"Accept": "application/vnd.elasticsearch+json; compatible-with=8"}
+            )
+            self.es_available = True
+        except Exception as e:
+            print(f"Error connecting to Elasticsearch: {e}")
+            self.es_available = False
+            
+        self.index_name = "user_data"
         self.json_data = None
         self.load_data()
-        self.setup_vector_db()
+        
+        # Only set up Elasticsearch if it's available
+        if self.es_available:
+            try:
+                self.setup_elasticsearch()
+            except Exception as e:
+                print(f"Error setting up Elasticsearch: {e}")
+                self.es_available = False
     
-    
-    #Loads the Data from the JSON File
     def load_data(self):
         """Load Data from the JSON file."""
         try:
             if os.path.exists(self.json_path) and os.path.getsize(self.json_path) > 0:
                 with open(self.json_path, 'r') as f:
                     data = json.load(f)
+                    
                 # Remove any MongoDB _id fields from entries
                 self.json_data = [
                     {k: v for k, v in item.items() if k != '_id'}
@@ -45,123 +58,123 @@ class RAGRetriever:
         except Exception as e:
             print(f"Error loading JSON file {self.json_path}: {e}")
             self.json_data = []
-                
     
-    
-    #Setup the Vector Database  and store the Vecor Embeddings in the ChromaDb 
-    def setup_vector_db(self):
-        """Setup the Vector Database and store the Vector Embeddings in the ChromaDb
-        
-        """
+    def setup_elasticsearch(self):
+        """Setup Elasticsearch index with basic settings"""
         try:
+            # Check if index exists, delete if it does
+            if self.es_client.indices.exists(index=self.index_name):
+                self.es_client.indices.delete(index=self.index_name)
             
-            # Create or Get a Collection
-            self.collection = self.chroma_client.get_or_create_collection("user_data")
+            # Define mapping for index - simplified
+            mapping = {
+                "mappings": {
+                    "properties": {
+                        "user_data": {
+                            "type": "object"
+                        },
+                        "text": {
+                            "type": "text"
+                        }
+                    }
+                }
+            }
             
-            # Create Embeddings for the JSON Data (if available)
-            if self.json_data :
+            # Create the index with mappings
+            self.es_client.indices.create(index=self.index_name, body=mapping)
+            print(f"Created index: {self.index_name}")
+            
+            # Index the data
+            if self.json_data:
+                self._index_data()
                 
-                # Create Embeddings
-                documents = []
-                ids = []
-                
-                for i, user in enumerate(self.json_data):
-                    user_str = json.dumps(user)
-                    documents.append(user_str)
-                    ids.append(f"user_{i}")
-                    
-                    
-                # Create the Embedding and Store it in the ChromaDB
-                
-                if documents : 
-                    embeddings = self.model.encode(documents, show_progress_bar=True).tolist()
-                    
-                    # Add the Embeddings to the Collection
-                    self.collection.add(
-                        documents=documents,
-                        embeddings=embeddings,
-                        # Could have been uselful is User Knows the ID and then passes the Query or, the LLM responses with a specific ID
-                        # metadatas=[{"id": id} for id in ids],
-                        ids=ids
-                    )
-                    
-                    print(f"Added {len(documents)} documents to the vector database.")
-
         except Exception as e:
-            print(f"Error setting up vector database: {e}")
-            return
-
-
-
-
-
-    # Generate the Entire Retrieval Context and Workflow
+            print(f"Error setting up Elasticsearch: {e}")
+            self.es_available = False
+    
+    def _index_data(self):
+        """Index data into Elasticsearch with basic indexing"""
+        try:
+            actions = []
+            
+            for i, user in enumerate(self.json_data):
+                user_str = json.dumps(user)
+                
+                # Create document for indexing - simplified
+                doc = {
+                    "_index": self.index_name,
+                    "_id": f"user_{i}",
+                    "_source": {
+                        "user_data": user,
+                        "text": user_str
+                    }
+                }
+                
+                actions.append(doc)
+            
+            # Bulk index documents
+            if actions:
+                success, failed = bulk(self.es_client, actions)
+                print(f"Indexed {success} documents into Elasticsearch. Failed: {failed}")
+                
+        except Exception as e:
+            print(f"Error indexing data: {e}")
+            self.es_available = False
+    
     def retrieve_context(self, query, n_results=2):
-        """Retrieve Context from the Vector Database
+        """Retrieve context based on the query
         
         Args:
             query (str): The query to search for.
             n_results (int, optional): The number of results to return. Defaults to 2.
             
         Returns:
-            list : List of retrieved documents.
+            list: List of retrieved documents.
         """
+        # Always refresh data from file to ensure we have the latest
+        self.load_data()
+        
+        # If no Elasticsearch or no data, return first n results from file
+        if not self.es_available or not self.json_data:
+            return self.json_data[:min(n_results, len(self.json_data))]
+        
         try:
-            # Get the Embedding for the Query
-            query_embedding = self.model.encode(query).tolist()
+            # Use simple match query for text search
+            search_body = {
+                "size": n_results,
+                "query": {
+                    "match": {
+                        "text": query
+                    }
+                }
+            }
             
-            # Perform the Search
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-            )
+            # Execute search
+            response = self.es_client.search(index=self.index_name, body=search_body)
             
-            # ChromaDB returns documents as list of lists; flatten first batch
-            docs_batch = []
-            if results and 'documents' in results and results['documents']:
-                first_batch = results['documents'][0] if isinstance(results['documents'][0], list) else results['documents']
-                docs_batch = first_batch
-            # Parse each document
-            # Flatten nested lists and parse documents
+            # Extract and return results
             relevant_docs = []
-            for doc in docs_batch:
-                if isinstance(doc, list):
-                    # Nested list: process each element
-                    for subdoc in doc:
-                        if isinstance(subdoc, str):
-                            try:
-                                relevant_docs.append(json.loads(subdoc))
-                            except json.JSONDecodeError:
-                                relevant_docs.append(subdoc)
-                        else:
-                            relevant_docs.append(subdoc)
-                elif isinstance(doc, str):
-                    try:
-                        relevant_docs.append(json.loads(doc))
-                    except json.JSONDecodeError:
-                        relevant_docs.append(doc)
-                else:
-                    relevant_docs.append(doc)
-
-            return relevant_docs
-
+            for hit in response["hits"]["hits"]:
+                user_data = hit["_source"]["user_data"]
+                relevant_docs.append(user_data)
+                
+            return relevant_docs if relevant_docs else self.json_data[:min(n_results, len(self.json_data))]
+            
         except Exception as e:
             print(f"Error retrieving context: {e}")
-            return []
-
-
-
-    #Refresh the Vector Database to Redefine the Context if needed (Only useful if the JSON Data Keeps on Changing) This is done because we are not creating an MCP Server that can interact with the MongoDB Database:
+            # Fallback to returning the first n items from json_data
+            return self.json_data[:min(n_results, len(self.json_data))]
+    
     def refresh_data(self):
-        """Refresh the Data by removing the old data and reloading the new data."""
-        
-        if self.collection:
-            self.collection.delete()
-        
+        """Refresh data by reloading JSON and reindexing"""
         self.load_data()
-        self.setup_vector_db()
-
-
-
-
-
+        
+        if self.es_available:
+            try:
+                # Wait a bit to allow any database operations to complete
+                time.sleep(0.5)
+                self.setup_elasticsearch()
+            except Exception as e:
+                print(f"Error refreshing Elasticsearch data: {e}")
+                # Continue without Elasticsearch
+                self.es_available = False

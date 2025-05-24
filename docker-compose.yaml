@@ -1,32 +1,40 @@
+
 services:
   app:
-    build: .
+    build: . # This tells the ocation of the Dockerfile
     container_name: chat-tool-app
     volumes:
-      #Mount the code for development to allow changes without rebuilding
+      # Mount the code for development to allow changes without rebuilding
       - .:/app
-      #Don't mount the venv directory if you have one
+      # Don't mount these directories
       - /app/.venv
       - /app/__pycache__
-    ports:
-      - "8000:8000" #Adjust if your app exposes any ports
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/chat-tool
-      #add your Gemini API key here or through a .env file
+      # Add your Gemini API key through .env file or set it here
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - mongodb
+      - elasticsearch
+    ports:
+      - "8000:8000"  # In case we add web interface in future
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.6.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
 
   mongodb:
     image: mongo:latest
     container_name: chat-tool-mongodb
     ports:
       - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    # No authentication for local development
     environment:
       - MONGO_INITDB_DATABASE=chat-tool
 
-volumes:
-  mongodb_data: # Persistent volume for MongoDB data
+

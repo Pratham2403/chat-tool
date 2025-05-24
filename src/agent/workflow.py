@@ -50,18 +50,18 @@ class AgentWorkflow:
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=os.getenv("GEMINI_API_KEY"),
-            temperature=0.1,
-            convert_system_message_to_human=True
+            temperature=0.1
+            # Removed deprecated parameter: convert_system_message_to_human
         )
         
         # Create workflow
         self.workflow = self._create_workflow()
     
-    def _create_workflow(self) -> StateGraph:
+    def _create_workflow(self):
         """Create the agent workflow
         
         Returns:
-            StateGraph: Workflow graph
+            Compiled workflow that can be invoked
         """
         # Define workflow states using a schema
         workflow = StateGraph(StateSchema)
@@ -175,6 +175,11 @@ class AgentWorkflow:
         query_type = context["query_type"]
         formatted_context = context["formatted_context"]
         
+        # Check if tool has already been executed for this query
+        if "tool_result" in context and context["tool_result"]:
+            # Tool already executed, just return the current state
+            return state.dict()
+        
         # Prepare system prompt
         system_prompt = f"""
         You are a tool selection agent for a database system. Based on the user query and the classified query type,
@@ -217,35 +222,44 @@ class AgentWorkflow:
                 
             # Execute appropriate tool based on query type
             result = ""
-            if query_type == "create":
-                # Prepare input for create tool
-                create_input = CreateUserInput(
-                    name=parameters.get("name", ""),
-                    email=parameters.get("email", ""),
-                    age=parameters.get("age"),
-                    role=parameters.get("role")
-                )
-                result = self.db_tools.create_user(create_input)
+            
+            # Check if the same tool has already been executed for this query by looking at past results
+            tool_already_executed = False
+            if 'tool_result' in state.context:
+                # Don't execute the same tool multiple times
+                tool_already_executed = True
+                result = state.context["tool_result"]
                 
-            elif query_type == "read":
-                # Prepare input for get tool
-                filters = parameters.get("filters", {})
-                get_input = GetUsersInput(filters=filters)
-                result = self.db_tools.get_users(get_input)
-                
-            elif query_type == "update":
-                # Prepare input for update tool
-                email = parameters.get("email", "")
-                # Remove email from update data
-                update_data = {k: v for k, v in parameters.items() if k != "email"}
-                update_input = UpdateUserInput(email=email, data=update_data)
-                result = self.db_tools.update_user(update_input)
-                
-            elif query_type == "delete":
-                # Prepare input for delete tool
-                email = parameters.get("email", "")
-                delete_input = DeleteUserInput(email=email)
-                result = self.db_tools.delete_user(delete_input)
+            if not tool_already_executed:
+                if query_type == "create":
+                    # Prepare input for create tool
+                    create_input = CreateUserInput(
+                        name=parameters.get("name", ""),
+                        email=parameters.get("email", ""),
+                        age=parameters.get("age"),
+                        role=parameters.get("role")
+                    )
+                    result = self.db_tools.create_user(create_input)
+                    
+                elif query_type == "read":
+                    # Prepare input for get tool
+                    filters = parameters.get("filters", {})
+                    get_input = GetUsersInput(filters=filters)
+                    result = self.db_tools.get_users(get_input)
+                    
+                elif query_type == "update":
+                    # Prepare input for update tool
+                    email = parameters.get("email", "")
+                    # Remove email from update data
+                    update_data = {k: v for k, v in parameters.items() if k != "email"}
+                    update_input = UpdateUserInput(email=email, data=update_data)
+                    result = self.db_tools.update_user(update_input)
+                    
+                elif query_type == "delete":
+                    # Prepare input for delete tool
+                    email = parameters.get("email", "")
+                    delete_input = DeleteUserInput(email=email)
+                    result = self.db_tools.delete_user(delete_input)
             
             # Update state context with tool execution results
             state.context["tool_result"] = result if 'result' in locals() else None
@@ -297,15 +311,25 @@ class AgentWorkflow:
         
         response = self.llm.invoke(messages)
         
-        # Check if we need more information
+        # Check if the operation was successful based on tool_result
+        operation_successful = "successfully" in tool_result.lower() if tool_result else False
+        
+        # Check if we need more information or if the operation failed
         complete = True
+        
+        # If required parameters are missing, mark as incomplete
         if query_type == "create" and (not parameters.get("name") or not parameters.get("email")):
             complete = False
         elif query_type == "update" and (not parameters.get("email") or len(parameters) <= 1):
             complete = False
         elif query_type == "delete" and not parameters.get("email"):
             complete = False
-        
+            
+        # If the operation was attempted but failed, mark as complete to avoid retries
+        if tool_result and not operation_successful:
+            # Operation was attempted but failed - no need to retry
+            complete = True
+            
         # Update state with response and completion flag
         state.response = response.content
         state.complete = complete
@@ -332,10 +356,15 @@ class AgentWorkflow:
         Returns:
             str: Response to the user
         """
-        # Initialize state
-        state = {"query": query, "context": {}, "response": "", "complete": False}
-        
-        # Run workflow
-        result = self.workflow.invoke(state)
-        # Return the 'response' from the result mapping
-        return result["response"]
+        try:
+            # Initialize state
+            state = {"query": query, "context": {}, "response": "", "complete": False}
+            
+            # Run workflow
+            result = self.workflow.invoke(state)
+            # Return the 'response' from the result mapping
+            return result["response"]
+        except Exception as e:
+            # Handle any unexpected errors
+            print(f"Error processing query: {e}")
+            return f"I'm sorry, I encountered an error while processing your request. Please try again with a more specific query."

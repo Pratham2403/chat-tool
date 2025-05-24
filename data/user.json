@@ -4,5 +4,65 @@
     "email": "p@gm.com",
     "age": 90,
     "role": "dev"
+  },
+  {
+    "name": "Jane Doe",
+    "email": "jane.doe@example.com",
+    "age": 30,
+    "role": "admin"
+  },
+  {
+    "name": "John Smith",
+    "email": "john.smith@example.com",
+    "age": 45,
+    "role": "user"
+  },
+  {
+    "name": "Alice Brown",
+    "email": "alice.brown@example.com",
+    "age": 25,
+    "role": "editor"
+  },
+  {
+    "name": "Bob Green",
+    "email": "bob.green@example.com",
+    "age": 50,
+    "role": "dev"
+  },
+  {
+    "name": "Charlie White",
+    "email": "charlie.white@example.com",
+    "age": 35,
+    "role": "user"
+  },
+  {
+    "name": "Diana Black",
+    "email": "diana.black@example.com",
+    "age": 28,
+    "role": "admin"
+  },
+  {
+    "name": "Ethan Gray",
+    "email": "ethan.gray@example.com",
+    "age": 60,
+    "role": "editor"
+  },
+  {
+    "name": "Fiona Blue",
+    "email": "fiona.blue@example.com",
+    "age": 22,
+    "role": "dev"
+  },
+  {
+    "name": "George Yellow",
+    "email": "george.yellow@example.com",
+    "age": 40,
+    "role": "user"
+  },
+  {
+    "name": "Hannah Purple",
+    "email": "hannah.purple@example.com",
+    "age": 32,
+    "role": "admin"
   }
 ]

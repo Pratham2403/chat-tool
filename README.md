@@ -1,24 +1,24 @@
-# AI Agent Workflow with RAG and MongoDB Integration
+# AI Agent with RAG and MongoDB Integration
 
-A conversational AI agent built with LangGraph and Gemini 2.0 Flash that uses Retrieval-Augmented Generation (RAG) to process JSON data and perform CRUD operations on a MongoDB Atlas database.
+A conversational AI agent built with LangGraph and Google's Gemini 2.0 Flash that uses Retrieval-Augmented Generation (RAG) to process JSON data and perform CRUD operations on a MongoDB database.
 
 ## Features
 
-- Agent workflow that iteratively processes user requests
-- RAG implementation for enhanced context understanding
-- MongoDB Atlas integration for database operations
-- Support for CRUD operations (Create, Read, Update, Delete)
-- Tool selection based on user intent
+- Agent workflow that processes user requests through a multi-step state machine
+- RAG implementation using Elasticsearch for efficient data retrieval
+- MongoDB integration for database operations
+- Support for CRUD operations on user data
+- Terminal-based interface for interaction
 
 ## Architecture
 
-The system implements a loop-based agent workflow that:
+The system implements a state machine-based agent workflow that:
 
 1. Processes user input
-2. Determines required actions/tools
-3. Retrieves relevant context from JSON data
-4. Performs database operations as needed
-5. Responds with appropriate information or asks for clarification
+2. Classifies the query type (Create, Read, Update, Delete)
+3. Selects and executes the appropriate tool
+4. Generates a natural language response
+5. Determines if the interaction is complete or needs follow-up
 
 ```mermaid
 graph TD
@@ -36,78 +36,73 @@ graph TD
     end
 
     subgraph RAG_System
-        G[Retriever] --> H[Processor]
-        H --> I[Format for Prompt]
+        G[Elasticsearch Retriever] --> H[RAG Processor]
+        H --> I[Context Integration]
     end
 
     subgraph MongoDB_Operations
-        J[Create]
-        K[Read]
-        L[Update]
-        M[Delete]
+        J[Create User]
+        K[Get Users]
+        L[Update User]
+        M[Delete User]
     end
 
     B --> C
     C --> G
     I --> C
-    D -->|Select Tool| J
-    D -->|Select Tool| K
-    D -->|Select Tool| L
-    D -->|Select Tool| M
+    D -->|Execute Tool| J
+    D -->|Execute Tool| K
+    D -->|Execute Tool| L
+    D -->|Execute Tool| M
     J --> E
     K --> E
     L --> E
     M --> E
 ```
 
+This architecture uses LangGraph to orchestrate the workflow and Gemini 2.0 Flash as the LLM for agent reasoning.
+
 ## System Components
 
-### 1. Terminal Interface
+### 1. Terminal Interface (`src/cli/terminal.py`)
+- Simple command-line chat interface for user interaction
+- Handles user input and displays agent responses
+- Provides exit mechanism with 'q' command
 
-- Simple command-line chat interface
-- User input processing and response formatting
-- Exit mechanism with 'q' command
-
-### 2. Agent Workflow (LangGraph Implementation)
-
-- State machine with nodes for query classification, tool selection, and response generation
+### 2. Agent Workflow (`src/agent/workflow.py`)
+- Implements a StateGraph using LangGraph
 - Uses Gemini 2.0 Flash as the reasoning engine
-- Implements loop-based approach for iterative refinement
-- Conditional edges for handling incomplete queries
+- Contains nodes for query classification, tool selection, and response generation
+- Includes conditional edges for handling incomplete queries
 
-### 3. RAG Implementation
+### 3. RAG Implementation (`src/rag/`)
+- `retriever.py`: Uses Elasticsearch for efficient text retrieval
+- `processor.py`: Processes retrieved information for the LLM context
+- Integrates structured JSON data into the agent's reasoning process
 
-- Vector database integration (ChromaDB) for semantic search
-- Sentence transformer embeddings for similarity search
-- Context window management and processing
-- Integrates retrieved context into agent prompts
+### 4. MongoDB Integration (`src/db/mongodb.py`)
+- Handles connection to MongoDB database
+- Provides methods for CRUD operations on user data
+- Manages error handling and connection lifecycle
 
-### 4. MongoDB Integration
-
-- Connection pool management with error handling
-- CRUD operation abstractions with JSON data synchronization
-- Tool-based database interactions
-- Automatic data refresh for RAG system
-
-### 5. Tool Framework
-
-- Tool registry with metadata using Pydantic models
-- Input validation and schema enforcement
-- Tool selection based on intent classification
-- MongoDB tools for Create, Read, Update, Delete operations
+### 5. Database Tools (`src/agent/tools.py`)
+- Defines Pydantic models for CRUD operations
+- Implements tool methods for the agent to interact with MongoDB
+- Validates input data before database operations
 
 ## Prerequisites
 
-- Python 3.8+
-- MongoDB Atlas account
-- Gemini 2.0 Flash API key
+- Python 3.8+ (Python 3.12 recommended)
+- MongoDB database
+- Gemini API key (from Google AI Studio)
+- Elasticsearch 8.x (for RAG implementation)
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/pratham2403/rag-llm-web.git
-cd rag-llm-web
+git clone https://github.com/yourusername/chat-tool.git
+cd chat-tool/server
 
 # Create a virtual environment
 python -m venv venv
@@ -117,18 +112,43 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+You'll need to set up the following services:
+1. MongoDB - either locally or using a cloud service
+2. Elasticsearch - for the RAG implementation
+
+For local development, you can use the provided Docker setup which includes both services.
+
 ## Configuration
 
-1. Create a `.env` file in the project root with:
+Create a `.env` file in the project root with:
 
 ```
 GEMINI_API_KEY=your_gemini_api_key
 MONGODB_URI=your_mongodb_connection_string
 ```
 
-2. Configure your MongoDB collections in `config.json`
+For local development with Docker, the docker-compose.yaml already configures MongoDB URI as:
+```
+MONGODB_URI=mongodb://mongodb:27017/chat-tool
+```
 
-## Usage
+You only need to provide your Gemini API key in the .env file or set it directly in the environment.
+
+## Running with Docker (Development Only)
+
+The application can be run using Docker for development purposes:
+
+```bash
+# Build and start the containers
+docker-compose up
+
+# To stop the containers
+docker-compose down
+```
+
+Note: This Docker setup is intended for development purposes only. For production, a more robust configuration would be needed.
+
+## Starting the Application Directly
 
 ```bash
 # Start the application
@@ -138,82 +158,79 @@ python app.py
 ## Project Structure
 
 ```
-chat-tool/
+server/
 ├── app.py                  # Main application entry point
-├── .env                    # Environment variables
 ├── config.json             # MongoDB collection configuration
+├── docker-compose.yaml     # Docker configuration for development
+├── Dockerfile              # Docker image definition
 ├── requirements.txt        # Package dependencies
+├── README.md               # This documentation
 ├── src/
 │   ├── agent/
 │   │   ├── workflow.py     # LangGraph agent workflow implementation
-│   │   └── tools.py        # Custom tools for the agent
+│   │   └── tools.py        # Database tools for the agent
 │   ├── db/
 │   │   └── mongodb.py      # MongoDB connection and operations
 │   ├── rag/
-│   │   ├── retriever.py    # Context retrieval logic
+│   │   ├── retriever.py    # Elasticsearch-based retriever
 │   │   └── processor.py    # Process retrieved information
 │   ├── cli/
-│   │   └── terminal.py     # Terminal interface logic
+│   │   └── terminal.py     # Terminal interface
 │   └── utils/
 │       └── helpers.py      # Utility functions
 └── data/
-    └── user.json           # JSON files for RAG context
+    └── user.json           # JSON data for RAG context
 ```
 
 ## Example Interactions
 
 ```
 User: "Create a new user with name John Doe and email john@example.com"
-Agent: "I'll create a new user. Do you want to specify any additional fields like 'age' or 'role'?"
-User: "Yes, add age 30 and role developer"
+Agent: "I'll create a new user. Do you want to specify any additional fields like age or role?"
+User: "Yes, age 30 and role developer"
 Agent: "Creating user with name: John Doe, email: john@example.com, age: 30, role: developer... User created successfully!"
 ```
 
 ```
 User: "Get all users"
-Agent: "Retrieving all users from database... Found 5 users. Here they are: [user list]"
+Agent: "Retrieving all users from database... Found 3 users:
+- John Doe (john@example.com): 30, developer
+- Jane Smith (jane@example.com): 28, designer
+- Bob Johnson (bob@example.com): 35, manager"
 ```
 
-## Technical Implementation Details
+```
+User: "Update John Doe's role to senior developer"
+Agent: "User John Doe updated. Role changed from developer to senior developer."
+```
 
-### 1. Query Classification
+```
+User: "Delete the user with email bob@example.com"
+Agent: "Are you sure you want to delete user Bob Johnson?"
+User: "Yes"
+Agent: "User Bob Johnson with email bob@example.com has been deleted."
+```
 
-The system uses Gemini 2.0 Flash to classify user queries into appropriate operations:
+## Technical Implementation
 
-- **CREATE**: Adding new user records
-- **READ**: Retrieving user information
-- **UPDATE**: Modifying existing user data
-- **DELETE**: Removing user records
+The project uses a state machine approach with LangGraph to process user queries:
 
-### 2. RAG Integration
+1. **Query Classification**: Analyzes user input to determine intent
+2. **Tool Selection**: Chooses the appropriate database operation
+3. **Response Generation**: Creates a natural language response
+4. **Completion Check**: Determines if the interaction requires follow-up
 
-- Uses embeddings to search for relevant context in user data
-- Processes retrieved information to format it for the LLM prompt
-- Provides database schema information to guide the agent
+The RAG component uses Elasticsearch to efficiently retrieve relevant context from JSON data, which helps the agent understand entity references and user intent.
 
-### 3. Tool Selection
+## Dependencies
 
-- Extracts parameters from user queries
-- Maps intent to appropriate database operation
-- Validates input data using Pydantic models
-
-### 4. Database Synchronization
-
-- Maintains consistency between MongoDB and local JSON data
-- Refreshes vector embeddings when data changes
-- Handles error conditions gracefully
-
-## Development
-
-### Adding New Collections
-
-To add support for new collections beyond users:
-
-1. Update `config.json` with the new collection schema
-2. Extend the MongoDB class with appropriate methods
-3. Create new Pydantic models in tools.py
-4. Implement tool methods in the DatabaseTools class
-5. Update the query classifier to recognize new collection operations
+The main dependencies for this project are:
+- `python-dotenv`: For loading environment variables
+- `pymongo`: For MongoDB database operations
+- `pydantic`: For data validation
+- `langchain` & `langchain-google-genai`: For LLM integration
+- `langgraph`: For building the agent workflow
+- `elasticsearch`: For the RAG component
 
 ## License
 

@@ -14,7 +14,7 @@ def main():
     # Load environment variables
     load_dotenv()
     
-    # Check for API key
+    # Check for  Gemini API key
     if not os.getenv("GEMINI_API_KEY"):
         print("Error: GEMINI_API_KEY not found in .env file")
         print("Please add your Gemini API key to .env file")

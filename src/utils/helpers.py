@@ -79,8 +79,39 @@ def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     """
     import re
     try:
-        json_str = re.search(r'\{(?:[^{}]|(?R))*\}', text).group(0)
-        return json.loads(json_str)
+        match = re.search(r'\{(?:[^{}]|(?R))*\}', text)
+        if match:
+            json_str = match.group(0)
+            return json.loads(json_str)
+        else:
+            # No JSON object found in the text
+            return None
     except Exception as e:
         print(f"Error extracting JSON from text: {e}")
         return None
+
+
+def safe_json_dumps(obj: Any) -> str:
+    """
+    Safely convert an object to a JSON string.
+    
+    Args:
+        obj (Any): The object to convert.
+        
+    Returns:
+        str: The JSON string.
+    """
+    try:
+        return json.dumps(obj, default=str)
+    except Exception as e:
+        print(f"Error converting to JSON: {e}")
+        # Create a safe version
+        if isinstance(obj, dict):
+            safe_obj = {}
+            for k, v in obj.items():
+                safe_obj[str(k)] = str(v)
+            return json.dumps(safe_obj)
+        elif isinstance(obj, list):
+            return json.dumps([str(i) for i in obj])
+        else:
+            return json.dumps(str(obj))

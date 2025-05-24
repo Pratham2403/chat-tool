@@ -49,10 +49,24 @@ class MongoDB:
         """
         
         try:
+            if self.db is None:
+                print("MongoDB not connected")
+                return None
+                
             collection = self.db["users"]
+
+            # Check if all the Data has been provided
+            if not all(key in user_data for key in ["email", "name", "role", "age"]):
+                print("Missing required user data")
+                return None
+            
+            # Check if user with the same email already exists
+            existing_user = collection.find_one({"email": user_data.get("email")})
+            if existing_user:
+                print(f"User with email {user_data.get('email')} already exists")
+                return None
+                
             result = collection.insert_one(user_data)
-            
-            
             return str(result.inserted_id)
 
         except Exception as e:
@@ -72,6 +86,10 @@ class MongoDB:
         """
         
         try:
+            if self.db is None:
+                print("MongoDB not connected")
+                return []
+                
             collection = self.db["users"]
             if query:
                 # Exclude the _id field from the results
@@ -97,6 +115,10 @@ class MongoDB:
         """
         
         try:
+            if self.db is None:
+                print("MongoDB not connected")
+                return False
+                
             collection = self.db["users"]
             result = collection.update_one({"email": email}, {"$set": update_data})
             
@@ -117,6 +139,10 @@ class MongoDB:
         """
         
         try:
+            if self.db is None:
+                print("MongoDB not connected")
+                return False
+                
             collection = self.db["users"]
             result = collection.delete_one({"email": email})
             
